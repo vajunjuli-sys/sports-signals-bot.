@@ -4,7 +4,8 @@ import time
 import datetime
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from telegram import Bot
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 # --- კონფიგურაცია ---
 TELEGRAM_BOT_TOKEN = "8814326130:AAHWgnTQ3R8sKnEFDJb0kfuNc77SDtM8VKg"
@@ -13,7 +14,7 @@ TELEGRAM_CHAT_ID = "1090757467"
 # შენი პირადი API გასაღები
 ODDS_API_KEY = "baf4f55404f1122cdef45b7d148cdf7c"
 
-# სპორტის სახეობები მონიტორინგისთვის (რაგბი და ფეხბურთი წინ)
+# სპორტის სახეობები მონიტორინგისთვის
 SPORTS_TO_SCAN = [
     'rugby_league',
     'rugby_union',
@@ -25,8 +26,6 @@ SPORTS_TO_SCAN = [
     'soccer_uefa_champs_league',
     'basketball_nba'
 ]
-
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
 # მარტივი სერვერი Render-ზე გაშვების უზრუნველსაყოფად
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -40,14 +39,6 @@ def start_health_server():
     port = int(os.environ.get('PORT', 10000))
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     server.serve_forever()
-
-def send_telegram_alert(message):
-    """უგზავნის შეტყობინებას მომხმარებელს ტელეგრამში"""
-    try:
-        bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message, parse_mode='HTML')
-        print("✅ სიგნალი წარმატებით გაიგზავნა ტელეგრამში!")
-    except Exception as e:
-        print(f"❌ შეცდომა ტელეგრამში გაგზავნისას: {e}")
 
 def get_upcoming_matches(sport):
     """იღებს უახლოეს მატჩებს API-დან"""
@@ -70,10 +61,11 @@ def get_upcoming_matches(sport):
         print(f"❌ შეცდომა მოთხოვნისას: {e}")
         return []
 
-def analyze_and_scan():
-    """მთავარი ციკლი - ეძებს მატჩებს და დიდ ვარდნებს / მაღალ კუშებს შეზღუდვების გარეშე"""
+def background_scanner(app):
+    """მთავარი ფონური ციკლი - ეძებს მატჩებს და აგზავნის სიგნალებს"""
+    time.sleep(5)
     processed_matches = set()
-    daily_signals = []  # დღის სიგნალების კოლექცია ექსპრესებისთვის
+    daily_signals = []  
     
     while True:
         print("🔍 იწყება მატჩების სკანირება...")
@@ -89,11 +81,9 @@ def analyze_and_scan():
                 if not commence_raw or match_id in processed_matches:
                     continue
                 
-                # დროის გამოთვლა მატჩის დაწყებამდე
                 commence_time = datetime.datetime.fromisoformat(commence_raw.replace('Z', '+00:00')).replace(tzinfo=None)
                 minutes_left = (commence_time - now).total_seconds() / 60
                 
-                # ფილტრი: ზუსტად 20-დან 30 წუთამდე დაწყებამდე
                 if 20 <= minutes_left <= 30:
                     sport_title = match.get('sport_title', 'სპორტი')
                     home = match.get('home_team')
@@ -102,7 +92,6 @@ def analyze_and_scan():
                     for bm in match.get('bookmakers', []):
                         for market in bm.get('markets', []):
                             
-                            # 1. ამოწმებს 1x2 / ფრეს / მაღალ კუშებს
                             if market.get('key') == 'h2h':
                                 for outcome in market.get('outcomes', []):
                                     current_price = outcome.get('price', 0)
@@ -111,7 +100,6 @@ def analyze_and_scan():
                                     if initial_price > 0:
                                         drop_percent = ((initial_price - current_price) / initial_price) * 100
                                         
-                                        # მაღალი კუში და ვარდნა
                                         if drop_percent >= 35 and initial_price >= 3.0:
                                             alert = (
                                                 f"🚨 <b>მაღალი კუში + ვარდნა!</b>\n\n"
@@ -122,11 +110,13 @@ def analyze_and_scan():
                                                 f"💰 <b>საწყისი კუში:</b> {initial_price:.2f} ➔ <b>ახალი:</b> {current_price:.2f}\n"
                                                 f"⏱️ <b>დაწყებამდე დარჩენილია:</b> {int(minutes_left)} წუთი!"
                                             )
-                                            send_telegram_alert(alert)
+                                            try:
+                                                app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=alert, parse_mode='HTML')
+                                            except Exception as e:
+                                                print(f"Error sending alert: {e}")
                                             processed_matches.add(match_id)
                                             daily_signals.append(f"{home} vs {away} ({outcome.get('name')}) - კუში: {current_price}")
                             
-                            # 2. ამოწმებს მაღალ ტოტალებს
                             elif market.get('key') == 'totals':
                                 for outcome in market.get('outcomes', []):
                                     name = outcome.get('name', '')
@@ -141,26 +131,56 @@ def analyze_and_scan():
                                             f"💰 <b>კუში:</b> {price:.2f}\n"
                                             f"⏱️ <b>დაწყებამდე დარჩენილია:</b> {int(minutes_left)} წუთი!"
                                         )
-                                        send_telegram_alert(alert)
+                                        try:
+                                            app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=alert, parse_mode='HTML')
+                                        except Exception as e:
+                                            print(e)
                                         processed_matches.add(match_id)
                                         daily_signals.append(f"{home} vs {away} ({name}) - კუში: {price}")
 
-        # ავტომატურად აგზავნის დღის დაგროვილ ყველა სიგნალს ექსპრესის სახით ყოველგვარი შეზღუდვის გარეშე
         if len(daily_signals) > 0:
             express_msg = "📊 <b>დღის ნაღდი ექსპრესების კრებული (ყველა ნაპოვნი):</b>\n\n"
             for s in daily_signals:
                 express_msg += f"• {s}\n"
             express_msg += "\n🔥 <i>წარმატებები! ყველა სიგნალი გაერთიანდა ბილეთში.</i>"
-            send_telegram_alert(express_msg)
+            try:
+                app.bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=express_msg, parse_mode='HTML')
+            except Exception as e:
+                print(e)
             daily_signals.clear()
 
-        # 3 წუთიანი პაუზა შემდეგ სკანირებამდე
         time.sleep(180)
 
-if __name__ == '__main__':
-    # ვებ სერვერის გაშვება ფონურ რეჟიმში
+# --- ტელეგრამის ბრძანებები ---
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    welcome_text = (
+        "<b>სპორტული სიგნალების ბოტი აქტიურია! 🎯🏉⚽</b>\n\n"
+        "მიმდინარეობს მატჩების ავტომატური სკანირება.\n"
+        "როგორც კი მაღალი კუში ან კოეფიციენტის მკვეთრი ვარდნა დაფიქსირდება, შეტყობინებას ავტომატურად მიიღებთ!"
+    )
+    await update.message.reply_text(welcome_text, parse_mode='HTML')
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("გამარჯობა! მე ვარ სპორტული სიგნალების ბოტი. სიგნალებს გამოვგზავნი ავტომატურად, როცა მატჩები გამოჩნდება.", parse_mode='HTML')
+
+def main():
+    # ვებ სერვერის გაშვება ფონურ რეჟიმში (Render-ისთვის)
     server_thread = threading.Thread(target=start_health_server, daemon=True)
     server_thread.start()
     
-    # სკანერის გაშვება
-    analyze_and_scan()
+    # აპლიკაციის აწყობა
+    application = ApplicationBuilder().token(TELEGRAM_BOT_TOKEN).build()
+    
+    # ჰენდლერების დამატება
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    # ფონური სკანერის გაშვება ცალკე ნაკადში
+    scanner_thread = threading.Thread(target=background_scanner, args=(application,), daemon=True)
+    scanner_thread.start()
+    
+    print("🚀 ბოტი წარმატებით გაშვებულია და უსმენს ბრძანებებს!")
+    application.run_polling()
+
+if __name__ == '__main__':
+    main()
