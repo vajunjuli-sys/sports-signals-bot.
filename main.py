@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
 
 # --- კონფიგურაცია ---
-TELEGRAM_BOT_TOKEN = "8814326130:AAHWgnTQ3R8sKnEFDJb0kfuNc77SDtM8VKg"
+TELEGRAM_BOT_TOKEN = "8814326130:AAH4etd9dQYrpWbUMaTMZ2wBRNK8-tRuFeY"
 TELEGRAM_CHAT_ID = "1090757467"
 
 # შენი პირადი API გასაღები
