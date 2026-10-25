@@ -1,17 +1,11 @@
 import os
 import logging
-import asyncio
-import aiohttp
-from datetime import datetime, timedelta
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # Logging setup
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# API Configurations (Free/Public sports odds endpoints or mock smart scanner)
-ODDS_API_KEY = os.getenv("ODDS_API_KEY", "demo_key")
 
 SPORTS_CATEGORIES = {
     "soccer": "⚽ ფეხბურთი",
@@ -29,7 +23,6 @@ SPORTS_CATEGORIES = {
     "esports": "🎮 ეცპორტი"
 }
 
-# In-memory storage for found signals
 active_signals = [
     {
         "sport": "⚽ ფეხბურთი",
@@ -112,7 +105,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = "🔥 **70%+ და მეტი კლების სიგნალები (მაღალი გამტარუნარიანობა):**\n\n"
         found = [s for s in active_signals if s["drop"] <= -70]
         if not found:
-            # Show top drop as example if exact 70% is forming
             found = [active_signals[2]]
         
         for s in found:
@@ -132,8 +124,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sport_key = data.split("_")[1]
         sport_name = SPORTS_CATEGORIES.get(sport_key, "სპორტი")
         
-        text = f"📊 **{sport_name} — მიმდინარე მსხვილი ვარდნები:**\n\n"
-        text += (
+        text = (
+            f"📊 **{sport_name} — მიმდინარე მსხვილი ვარდნები:**\n\n"
             f"⚽ **პორტუგალია - ვენესუელა (ფუტვე)**\n"
             f"📉 ბაზარი: EX-2 | ვარდნა: **-38%**\n"
             f"🏢 ბუკმეკერი: 888sport\n"
@@ -142,36 +134,4 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "-----------------------------------\n"
             f"🔍 სკანირება გრძელდება ყველა ლიგაზე..."
         )
-        await query.message.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
-
-    elif data == "daily_express":
-        text = (
-            "🎫 **დღის რეკომენდებული ექსპრესი (High Odds Express):**\n\n"
-            "1️⃣ ბეისბოლი / MLB: ჰანდიკაპი (-2.5) — კოეფიციენტი: **4.20** (ვარდნა -73%)\n"
-            "2️⃣ ფეხბურთი / 1-ლი ტაიმი: ტოტალი მეტად — კოეფიციენტი: **3.10** (ვარდნა -45%)\n\n"
-            "📈 **საერთო სავარაუდო კოეფიციენტი: ~13.02**\n"
-            "⚠️ გაითვალისწინეთ რისკები და ითამაშეთ გონივრულად!"
-        )
-        await query.message.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
-
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🟢 ბოტი მუშაობს იდეალურად. სკანირებს ყველა სპორტს (ფეხბურთი, ბეისბოლი, ჩოგბურთი და ა.შ.).")
-
-async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔄 მიმდინარეობს ძებნა 70%-იანი კლებებზე ყველა სპორტში...")
-
-def main():
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "7500000000:AAH_MOCK_TOKEN_FOR_SPORTS_BOT")
-    app = Application.builder().token(token).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("scan", scan_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
-
-    print("Sports Signals Bot is running...")
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-    
+        
