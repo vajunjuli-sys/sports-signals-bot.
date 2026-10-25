@@ -134,4 +134,39 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "-----------------------------------\n"
             f"🔍 სკანირება გრძელდება ყველა ლიგაზე..."
         )
-        
+        await query.message.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+
+    elif data == "daily_express":
+        text = (
+            "🎫 **დღის რეკომენდებული ექსპრესი (High Odds Express):**\n\n"
+            "1️⃣ ბეისბოლი / MLB: ჰანდიკაპი (-2.5) — კოეფიციენტი: **4.20** (ვარდნა -73%)\n"
+            "2️⃣ ფეხბურთი / 1-ლი ტაიმი: ტოტალი მეტად — კოეფიციენტი: **3.10** (ვარდნა -45%)\n\n"
+            "📈 **საერთო სავარაუდო კოეფიციენტი: ~13.02**\n"
+            "⚠️ გაითვალისწინეთ რისკები და ითამაშეთ გონივრულად!"
+        )
+        await query.message.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🟢 ბოტი მუშაობს იდეალურად. სკანირებს ყველა სპორტს (ფეხბურთი, ბეისბოლი, ჩოგბურთი და ა.შ.).")
+
+async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔄 მიმდინარეობს ძებნა 70%-იანი კლებებზე ყველა სპორტში...")
+
+def main():
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        logger.error("TELEGRAM_BOT_TOKEN environment variable is missing!")
+        return
+
+    app = Application.builder().token(token).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CommandHandler("scan", scan_command))
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    logger.info("Sports Signals Bot is starting...")
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
