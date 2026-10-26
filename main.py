@@ -173,6 +173,13 @@ def main():
         logger.error("TELEGRAM_BOT_TOKEN is missing or not set!")
         return
 
+    # Force delete any stuck webhooks so polling can work properly
+    try:
+        requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true")
+        logger.info("Webhook successfully cleared.")
+    except Exception as e:
+        logger.warning(f"Could not clear webhook: {e}")
+
     # Start background HTTP server for Render
     server_thread = threading.Thread(target=run_http_server, daemon=True)
     server_thread.start()
