@@ -1,12 +1,24 @@
 import os
 import json
 import urllib.request
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
 import time
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BOT_TOKEN = "8934076928:AAejdrV1HvQv6tmhlL_LXUIQQkYbfGck7uw"
 subscribed_chats = set()
+
+# Render-ის პორტის შესანარჩუნებელი სერვერი
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is active!")
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
 
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -18,61 +30,53 @@ def send_message(chat_id, text):
     except Exception as e:
         print(f"Error sending message: {e}")
 
-class TelegramWebhookHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        # Health check
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is alive and running via Webhook!")
-
-    def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length)
-        
-        try:
-            data = json.loads(post_data.decode('utf-8'))
-            if "message" in data:
-                message = data["message"]
-                chat_id = message["chat"]["id"]
-                text = message.get("text", "")
-                
-                subscribed_chats.add(chat_id)
-                print(f"Received message from {chat_id}: {text}")
-                
-                welcome_text = (
-                    "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
-                    "✅ ვებჰუქი წარმატებით დაუკავშირდა!\n"
-                    "ბოტი ფონურ რეჟიმში აკვირდება ბაზრებს და გამოგიგზავნის კოეფიციენტების ვარდნის სიგნალებს."
-                )
-                send_message(chat_id, welcome_text)
-        except Exception as e:
-            print(f"Error processing webhook: {e}")
-
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-def run_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), TelegramWebhookHandler)
-    print(f"Webhook server running on port {port}")
-    server.serve_forever()
-
-def set_webhook():
-    time.sleep(4)  # დაველოდოთ სერვერის ჩართვას
-    # შენი Render სერვისის ზუსტი საჯარო URL
-    render_url = f"https://sports-signals-bot.onrender.com/"
-    wh_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={render_url}"
+# ტელეგრამის პირდაპირი პოლერი (სუფთა მუშა მეთოდი)
+def telegram_poller():
+    time.sleep(3)
+    
+    # 1. აუცილებლად ვშლით ვებჰუქს, რომ getUpdates-მა იმუშაოს
     try:
-        req = urllib.request.Request(wh_url)
-        with urllib.request.urlopen(req, timeout=10) as response:
-            print("Webhook set response:", response.read().decode())
+        del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
+        with urllib.request.urlopen(del_url, timeout=10) as response:
+            print("Webhook reset:", response.read().decode())
     except Exception as e:
-        print(f"Error setting webhook: {e}")
+        print(f"Error resetting webhook: {e}")
 
+    offset = 0
+    print("Direct polling started...")
+
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=30"
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=35) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                
+                if data.get("ok"):
+                    for result in data.get("result", []):
+                        offset = result["update_id"] + 1
+                        message = result.get("message")
+                        if message and "chat" in message:
+                            chat_id = message["chat"]["id"]
+                            text = message.get("text", "")
+                            
+                            subscribed_chats.add(chat_id)
+                            print(f"Received from {chat_id}: {text}")
+                            
+                            welcome_text = (
+                                "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
+                                "✅ კავშირი დამყარებულია!\n"
+                                "ბოტი წარმატებით გიპასუხებთ ყველა სიგნალზე."
+                            )
+                            send_message(chat_id, welcome_text)
+        except Exception as e:
+            print(f"Poller error: {e}")
+            time.sleep(5)
+
+# ფონური სიგნალების სკანერი
 def auto_signal_scanner():
     while True:
-        time.sleep(180)  # ყოველ 3 წუთში
+        time.sleep(180)
         if subscribed_chats:
             auto_text = (
                 "🚨 რეალური ბაზრის სიგნალი!\n\n"
@@ -86,10 +90,10 @@ def auto_signal_scanner():
                 send_message(chat_id, auto_text)
 
 if __name__ == "__main__":
-    # ავტომატურად ვუერთებთ ვებჰუქს ცალკე თრედიდან
-    threading.Thread(target=set_webhook, daemon=True).start()
-    # ფონური სიგნალების სკანერი
+    # ვუშვებთ პორტის დამჭერ HTTP სერვერს ცალკე თრედში
+    threading.Thread(target=run_server, daemon=True).start()
+    # ვუშვებთ სკანერს
     threading.Thread(target=auto_signal_scanner, daemon=True).start()
-    # ვუშვებთ მთავარ ვებ სერვერს
-    run_server()
+    # მთავარ თრედში ვუშვებთ პოლერს
+    telegram_poller()
     
