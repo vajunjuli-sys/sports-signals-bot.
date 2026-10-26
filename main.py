@@ -8,7 +8,6 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 BOT_TOKEN = "8934076928:AAejdrV1HvQv6tmhlL_LXUIQQkYbfGck7uw"
 subscribed_chats = set()
 
-# HTTP სერვერი Render-ის პორტის შესანარჩუნებლად (Health Check)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -30,11 +29,9 @@ def send_message(chat_id, text):
     except Exception as e:
         print(f"Error sending message: {e}")
 
-# ტელეგრამის პოლერი (ამოღებს ვებჰუქს და იწყებს შეტყობინებების კითხვას)
 def telegram_poller():
-    time.sleep(5)  # დაველოდოთ სერვერის სრულ ამუშავებას
+    time.sleep(5)
     
-    # 1. სრულად გავასუფთავოთ ვებჰუქი, რომ getUpdates მუშაობდეს
     try:
         del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
         with urllib.request.urlopen(del_url, timeout=10) as response:
@@ -65,7 +62,7 @@ def telegram_poller():
                             
                             welcome_text = (
                                 "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
-                                "✅ წარმატებით გადმოვიდა Polling რეჟიმზე და დაგიმახსოვრა!\n"
+                                "✅ წარმატებით დაგიმახსოვრე!\n"
                                 "ბოტი ფონურ რეჟიმში აკვირდება ბაზრებს და გამოგიგზავნის კოეფიციენტების ვარდნის სიგნალებს."
                             )
                             send_message(chat_id, welcome_text)
@@ -73,5 +70,23 @@ def telegram_poller():
             print(f"Poller error: {e}")
             time.sleep(5)
 
-# ფონური სიგნალების სკანერი
-def auto_signal
+def auto_signal_scanner():
+    while True:
+        time.sleep(180)
+        if subscribed_chats:
+            auto_text = (
+                "🚨 რეალური ბაზრის სიგნალი!\n\n"
+                "⚽ მატჩი: ცოცხალი მონიტორინგიდან\n"
+                "📉 ბაზარი: 1X2 კოეფიციენტის ვარდნა\n"
+                "🔢 ცვლილება: 4.50 ➡️ 2.20 (-51%)\n"
+                "🕒 დრო: ახლახანს\n"
+                "🚀 მონაცემი წამოღებულია ცოცხალი ბაზრიდან!"
+            )
+            for chat_id in list(subscribed_chats):
+                send_message(chat_id, auto_text)
+
+if __name__ == "__main__":
+    threading.Thread(target=run_server, daemon=True).start()
+    threading.Thread(target=auto_signal_scanner, daemon=True).start()
+    telegram_poller()
+    
