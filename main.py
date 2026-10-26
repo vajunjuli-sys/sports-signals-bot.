@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 subscribed_chats = set()
 
 # Bot Token integrated directly
-BOT_TOKEN = "7949390230:AAGYqE2O-B_34xK4C8Z1s42M6W1g7h7p2J0"
+BOT_TOKEN = "8814326130:AAH4etd9DQYrpWUMaTMZ2wBRNK8-tRuFeY"
 
 # Dummy HTTP Server to satisfy Render Web Service port binding requirement
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -32,7 +32,8 @@ def run_http_server():
 
 # Background thread that automatically scans and pushes signals to users
 def auto_signal_scanner():
-    while Time.sleep(60):  # ყოველ 60 წამში ერთხელ შემოწმება
+    while True:
+        time.sleep(60)  # ყოველ 60 წამში ერთხელ შემოწმება
         if subscribed_chats:
             auto_text = (
                 "🚨 ავტომატური სიგნალი! აღმოჩენილია ახალი ვარდნა:\n\n"
