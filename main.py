@@ -1,24 +1,12 @@
 import os
 import json
 import urllib.request
-import time
-import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+import threading
+import time
 
 BOT_TOKEN = "8934076928:AAejdrV1HvQv6tmhlL_LXUIQQkYbfGck7uw"
 subscribed_chats = set()
-
-# Render-ის პორტის შესანარჩუნებელი სერვერი
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is active!")
-
-def run_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
 
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -30,50 +18,57 @@ def send_message(chat_id, text):
     except Exception as e:
         print(f"Error sending message: {e}")
 
-# ტელეგრამის პირდაპირი პოლერი (სუფთა მუშა მეთოდი)
-def telegram_poller():
-    time.sleep(3)
-    
-    # 1. აუცილებლად ვშლით ვებჰუქს, რომ getUpdates-მა იმუშაოს
-    try:
-        del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
-        with urllib.request.urlopen(del_url, timeout=10) as response:
-            print("Webhook reset:", response.read().decode())
-    except Exception as e:
-        print(f"Error resetting webhook: {e}")
+class TelegramWebhookHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        # Render Health Check (ეს პინგი სერვერს ფხიზლად ამყოფებს)
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot Webhook Server is active!")
 
-    offset = 0
-    print("Direct polling started...")
-
-    while True:
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        post_data = self.rfile.read(content_length)
+        
         try:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=30"
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=35) as response:
-                data = json.loads(response.read().decode('utf-8'))
+            data = json.loads(post_data.decode('utf-8'))
+            if "message" in data:
+                message = data["message"]
+                chat_id = message["chat"]["id"]
+                text = message.get("text", "")
                 
-                if data.get("ok"):
-                    for result in data.get("result", []):
-                        offset = result["update_id"] + 1
-                        message = result.get("message")
-                        if message and "chat" in message:
-                            chat_id = message["chat"]["id"]
-                            text = message.get("text", "")
-                            
-                            subscribed_chats.add(chat_id)
-                            print(f"Received from {chat_id}: {text}")
-                            
-                            welcome_text = (
-                                "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
-                                "✅ კავშირი დამყარებულია!\n"
-                                "ბოტი წარმატებით გიპასუხებთ ყველა სიგნალზე."
-                            )
-                            send_message(chat_id, welcome_text)
+                subscribed_chats.add(chat_id)
+                print(f"Received message from {chat_id}: {text}")
+                
+                welcome_text = (
+                    "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
+                    "✅ კავშირი წარმატებით დამყარდა!\n"
+                    "ბოტი მზად არის დააკვირდეს ბაზრებს და გამოგიგზავნოს სიგნალები."
+                )
+                send_message(chat_id, welcome_text)
         except Exception as e:
-            print(f"Poller error: {e}")
-            time.sleep(5)
+            print(f"Error processing webhook: {e}")
 
-# ფონური სიგნალების სკანერი
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), TelegramWebhookHandler)
+    server.serve_forever()
+
+def set_webhook():
+    time.sleep(5)
+    # ზუსტი ვებჰუქის მისამართი Render-ზე
+    render_url = f"https://sports-signals-bot.onrender.com/"
+    wh_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={render_url}"
+    try:
+        req = urllib.request.Request(wh_url)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            print("Webhook set response:", response.read().decode())
+    except Exception as e:
+        print(f"Error setting webhook: {e}")
+
 def auto_signal_scanner():
     while True:
         time.sleep(180)
@@ -90,10 +85,7 @@ def auto_signal_scanner():
                 send_message(chat_id, auto_text)
 
 if __name__ == "__main__":
-    # ვუშვებთ პორტის დამჭერ HTTP სერვერს ცალკე თრედში
-    threading.Thread(target=run_server, daemon=True).start()
-    # ვუშვებთ სკანერს
+    threading.Thread(target=set_webhook, daemon=True).start()
     threading.Thread(target=auto_signal_scanner, daemon=True).start()
-    # მთავარ თრედში ვუშვებთ პოლერს
-    telegram_poller()
+    run_server()
     
