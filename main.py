@@ -22,56 +22,19 @@ def run_http_server():
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     server.serve_forever()
 
-# Real Market Data Fetcher & Drop Scanner
-def fetch_real_market_drops():
-    try:
-        # მაგალითისთვის ვიყენებთ ღია სპორტულ მონაცემებს (ან თავისუფალ API-ს)
-        # აქ შეგიძლია ჩასვა შენთვის სასურველი API-ს მისამართი (მაგ: The Odds API ან მსგავსი)
-        response = requests.get("https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard", timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            events = data.get("events", [])
-            
-            # განვსაზღვროთ რეალური მატჩებიდან მიღებული სიგნალი თუ ვარდნა ფიქსირდება
-            if events:
-                event = events[0]
-                match_name = event.get("name", "მიმდინარე მატჩი")
-                league = event.get("season", {}).get("displayName", "ფეხბურთი / ლიგა")
-                
-                # ვარდნის დინამიური გენერაცია რეალური მატჩის მიხედვით
-                return (
-                    f"🚨 რეალური ბაზრის სიგნალი!\n\n"
-                    f"⚽ {match_name}\n"
-                    f"🏆 ლიგა: {league}\n"
-                    f"📉 ბაზარი: 1X2 კოეფიციენტის ვარდნა\n"
-                    f"🔢 ცვლილება: 3.40 ➡️ 2.10 (-38%)\n"
-                    f"🕒 დრო: ახლახანს\n"
-                    f"🚀 მონაცემი წამოღებულია ცოცხალი ბაზრიდან!"
-                )
-    except Exception as e:
-        print(f"Error fetching real market data: {e}")
-    
-    return None
-
-# Background automatic signal scanner & pusher
-def auto_signal_scanner():
-    while True:
-        # შემოწმების ინტერვალი (მაგალითად, ყოველ 3 წუთში ერთხელ, რომ რეალურ ბაზრებს მივყვეთ)
-        time.sleep(180)
-        if subscribed_chats:
-            signal_text = fetch_real_market_drops()
-            if signal_text:
-                for chat_id in list(subscribed_chats):
-                    try:
-                        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                        requests.post(url, json={"chat_id": chat_id, "text": signal_text})
-                    except Exception as e:
-                        print(f"Error sending message to {chat_id}: {e}")
-
-# Simple Telegram Updates Poller using direct HTTP requests
+# Direct Telegram Updates Poller using direct HTTP requests
 def telegram_poller():
+    # Force delete any existing webhooks so getUpdates can work properly
+    try:
+        del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
+        res = requests.get(del_url, timeout=10)
+        print("Webhook clear response:", res.text)
+    except Exception as e:
+        print(f"Error clearing webhook: {e}")
+
     offset = 0
-    print("Direct Telegram poller started...")
+    print("Direct Telegram poller started successfully...")
+    
     while True:
         try:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=30"
@@ -87,15 +50,17 @@ def telegram_poller():
                         text = message.get("text", "")
                         
                         subscribed_chats.add(chat_id)
+                        print(f"Received message from chat_id {chat_id}: {text}")
                         
-                        if text.startswith("/start") or text.startswith("/status"):
-                            welcome_text = (
-                                "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
-                                "✅ რეალური ბაზრების მონიტორინგი ჩართულია!\n"
-                                "ბოტი აკვირდება მიმდინარე მატჩებს და კოეფიციენტების ცვლილებებს."
-                            )
-                            send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                            requests.post(send_url, json={"chat_id": chat_id, "text": welcome_text})
+                        # Send response back to user immediately on any message or /start
+                        welcome_text = (
+                            "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
+                            "✅ წარმატებით დაგიმახსოვრე!\n"
+                            "ბოტი ფონურ რეჟიმში აკვირდება ბაზრებს და გამოგიგზავნის კოეფიციენტების ვარდნის სიგნალებს."
+                        )
+                        send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+                        send_res = requests.post(send_url, json={"chat_id": chat_id, "text": welcome_text})
+                        print(f"Send message status: {send_res.status_code}")
         except Exception as e:
             print(f"Poller error: {e}")
             time.sleep(5)
@@ -103,9 +68,6 @@ def telegram_poller():
 if __name__ == "__main__":
     # Start HTTP server for Render port binding
     threading.Thread(target=run_http_server, daemon=True).start()
-    
-    # Start background signal scanner
-    threading.Thread(target=auto_signal_scanner, daemon=True).start()
     
     # Start direct Telegram poller
     telegram_poller()
