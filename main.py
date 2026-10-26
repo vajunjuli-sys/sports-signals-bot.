@@ -1,11 +1,26 @@
 import os
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # Logging setup
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Dummy HTTP Server to satisfy Render Web Service port binding requirement
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running!")
+
+def run_http_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    logger.info(f"Health check server running on port {port}")
+    server.serve_forever()
 
 SPORTS_CATEGORIES = {
     "soccer": "⚽ ფეხბურთი",
@@ -126,5 +141,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         text = (
             f"📊 **{sport_name} — მიმდინარე მსხვილი ვარდნები:**\n\n"
-            "⚽ **პორტუგალია - ვენესუელა (ფუტვე
+            "⚽ **პორტუგალია - ვენესუელა (ფუტვე)**\n"
+            "📉 ბაზარი: EX-2 | ვარდნა: **-38%**\n"
+            "🏢 ბუკმეკერი: 888sport\n"
+            "🔢 კუშები: ~~24.00~~ ➡️ **15.00**\n"
+            "🕒 დრო: ხვალ, 01:30\n\n"
+            "-----------------------------------\n"
+            "🔍 სკანირება გრძელდება ყველა ლიგაზე..."
+        )
+        await query.message.edit_text(
         
