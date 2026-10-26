@@ -126,6 +126,5 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         text = (
             f"📊 **{sport_name} — მიმდინარე მსხვილი ვარდნები:**\n\n"
-            "⚽ **პორტუგალია - ვენესუელა (ფუტვე)**\n"
-            "📉 ბაზარი:
+            "⚽ **პორტუგალია - ვენესუელა (ფუტვე
         
