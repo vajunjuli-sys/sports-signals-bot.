@@ -1,101 +1,87 @@
 import os
+import asyncio
 import json
-import urllib.request
-import time
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from aiohttp import web, ClientSession
 
-# ახალი ვალიდური ტოკენი
 BOT_TOKEN = "8934076928:AAF1Nkpu65Q9MN5SXH9WtRRQnBU2QEgF9Y0"
+RENDER_URL = "https://sports-signals-bot.onrender.com"
+
 subscribed_chats = set()
 
-# Render-ის პორტის შესანარჩუნებელი სერვერი
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Sports Signals Bot is active and running!")
-
-def run_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
-
-def send_message(chat_id, text):
+async def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = json.dumps({"chat_id": chat_id, "text": text}).encode('utf-8')
-    req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
+    payload = {"chat_id": chat_id, "text": text}
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
-            return response.read()
+        async with ClientSession() as session:
+            async with session.post(url, json=payload) as resp:
+                return await resp.json()
     except Exception as e:
         print(f"Error sending message: {e}")
 
-# ტელეგრამის პირდაპირი პოლერი
-def telegram_poller():
-    time.sleep(3)
-    
-    # 1. სრულად ვასუფთავებთ ვებჰუქს, რომ getUpdates-მა შეუფერხებლად იმუშაოს
+# Telegram Webhook Handler
+async def handle_webhook(request):
     try:
-        del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
-        with urllib.request.urlopen(del_url, timeout=10) as response:
-            print("Webhook reset response:", response.read().decode())
+        data = await request.json()
+        if "message" in data:
+            message = data["message"]
+            chat_id = message["chat"]["id"]
+            text = message.get("text", "")
+
+            subscribed_chats.add(chat_id)
+            print(f"Received message: '{text}' from chat_id: {chat_id}")
+
+            welcome_text = (
+                "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
+                "✅ Webhook კავშირი წარმატებით დამყარდა!\n"
+                "ბოტი აქტიურია და მზად არის სიგნალების მისაღებად."
+            )
+            await send_message(chat_id, welcome_text)
     except Exception as e:
-        print(f"Error resetting webhook: {e}")
+        print(f"Webhook error: {e}")
+    
+    return web.Response(text="OK", status=200)
 
-    offset = 0
-    print("Telegram polling loop started successfully...")
+async def handle_health(request):
+    return web.Response(text="Bot Webhook Server is Live!", status=200)
 
+# Webhook-ის ავტომატური რეგისტრაცია Telegram-ში
+async def setup_webhook():
+    await asyncio.sleep(2)
+    webhook_url = f"{RENDER_URL}/webhook"
+    set_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={webhook_url}&drop_pending_updates=true"
+    
+    async with ClientSession() as session:
+        async with session.get(set_url) as resp:
+            result = await resp.json()
+            print("Set Webhook Status:", result)
+
+# პერიოდული სიგნალების გაგზავნა
+async def auto_signal_loop():
     while True:
-        try:
-            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=30"
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=35) as response:
-                data = json.loads(response.read().decode('utf-8'))
-                
-                if data.get("ok"):
-                    for result in data.get("result", []):
-                        offset = result["update_id"] + 1
-                        message = result.get("message")
-                        if message and "chat" in message:
-                            chat_id = message["chat"]["id"]
-                            text = message.get("text", "")
-                            
-                            subscribed_chats.add(chat_id)
-                            print(f"Received message from {chat_id}: {text}")
-                            
-                            welcome_text = (
-                                "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
-                                "✅ კავშირი წარმატებით დამყარდა ახალი ტოკენით!\n"
-                                "ბოტი მზად არის დააკვირდეს ბაზრებს და გამოგიგზავნოს სიგნალები."
-                            )
-                            send_message(chat_id, welcome_text)
-        except Exception as e:
-            print(f"Poller error: {e}")
-            time.sleep(5)
-
-# ფონური სიგნალების ავტომატური სკანერი
-def auto_signal_scanner():
-    while True:
-        time.sleep(180)  # ყოველ 3 წუთში ერთხელ
+        await asyncio.sleep(180)  # ყოველ 3 წუთში
         if subscribed_chats:
-            auto_text = (
+            signal_text = (
                 "🚨 რეალური ბაზრის სიგნალი!\n\n"
                 "⚽ მატჩი: ცოცხალი მონიტორინგიდან\n"
                 "📉 ბაზარი: 1X2 კოეფიციენტის ვარდნა\n"
                 "🔢 ცვლილება: 4.50 ➡️ 2.20 (-51%)\n"
-                "🕒 დრო: ახლახანს\n"
-                "🚀 მონაცემი წამოღებულია ცოცხალი ბაზრიდან!"
+                "🕒 დრო: ახლახანს"
             )
-            for chat_id in list(subscribed_chats):
-                send_message(chat_id, auto_text)
+            for cid in list(subscribed_chats):
+                await send_message(cid, signal_text)
+
+async def init_app():
+    app = web.Application()
+    app.router.add_post("/webhook", handle_webhook)
+    app.router.add_get("/", handle_health)
+    
+    # ფონური ამოცანების გაშვება
+    asyncio.create_task(setup_webhook())
+    asyncio.create_task(auto_signal_loop())
+    
+    return app
 
 if __name__ == "__main__":
-    # ვუშვებთ პორტის დამჭერ HTTP სერვერს ცალკე თრედში
-    threading.Thread(target=run_server, daemon=True).start()
-    
-    # ვუშვებთ ფონურ სიგნალების სკანერს ცალკე თრედში
-    threading.Thread(target=auto_signal_scanner, daemon=True).start()
-    
-    # მთავარ თრედში ვუშვებთ ტელეგრამის პოლერს
-    telegram_poller()
+    port = int(os.environ.get("PORT", 10000))
+    app = asyncio.run(init_app())
+    web.run_app(app, host="0.0.0.0", port=port)
