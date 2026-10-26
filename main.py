@@ -1,10 +1,9 @@
 import os
 import time
 import threading
-import requests
-from flask import Flask, request
-
-app = Flask(__name__)
+import urllib.request
+import json
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Telegram Bot Token
 BOT_TOKEN = "8934076928:AAejdrV1HvQv6tmhlL_LXUIQQkYbfGck7uw"
@@ -12,41 +11,70 @@ BOT_TOKEN = "8934076928:AAejdrV1HvQv6tmhlL_LXUIQQkYbfGck7uw"
 # Storage for subscribed users
 subscribed_chats = set()
 
-@app.route("/", methods=["GET", "POSTIndex"])
-def index():
-    return "Bot is alive and running!"
+# Render Web Service Health Check Server
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is alive and running!")
 
-@app.route(f"/{BOT_TOKEN}", methods=["POST"])
-def webhook():
-    data = request.get_json()
-    if data and "message" in data:
-        message = data["message"]
-        chat_id = message["chat"]["id"]
-        text = message.get("text", "")
-        
-        subscribed_chats.add(chat_id)
-        
-        # პასუხი ნებისმიერ შეტყობინებაზე ან /start-ზე
-        welcome_text = (
-            "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
-            "✅ ვებჰუქი წარმატებით დაკავშირდა!\n"
-            "ბოტი ფონურ რეჟიმში აკვირდება ბაზრებს და გამოგიგზავნის კოეფიციენტების ვარდნის სიგნალებს."
-        )
-        send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(send_url, json={"chat_id": chat_id, "text": welcome_text})
-        
-    return "OK", 200
+def run_http_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    server.serve_forever()
 
-def set_webhook_url():
-    time.sleep(3) # დაველოდოთ სერვერის ჩართვას
-    # Render-ის ზუსტი საჯარო მისამართი
-    render_url = f"https://sports-signals-bot.onrender.com/{BOT_TOKEN}"
-    wh_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={render_url}"
+def send_telegram_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = json.dumps({"chat_id": chat_id, "text": text}).encode('utf-8')
+    req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'})
     try:
-        res = requests.get(wh_url)
-        print("Webhook set response:", res.text)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return response.read()
     except Exception as e:
-        print(f"Error setting webhook: {e}")
+        print(f"Error sending message: {e}")
+
+# Direct Telegram Updates Poller using standard libraries
+def telegram_poller():
+    print("=== BOT STARTING UP ===")
+    
+    # Clear webhooks
+    try:
+        del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
+        with urllib.request.urlopen(del_url, timeout=10) as response:
+            print("Webhook clear response:", response.read().decode())
+    except Exception as e:
+        print(f"Error clearing webhook: {e}")
+
+    offset = 0
+    print("Entering polling loop, waiting for messages...")
+    
+    while True:
+        try:
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=30"
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=35) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                
+                if data.get("ok"):
+                    for result in data.get("result", []):
+                        offset = result["update_id"] + 1
+                        message = result.get("message")
+                        if message and "chat" in message:
+                            chat_id = message["chat"]["id"]
+                            text = message.get("text", "")
+                            
+                            subscribed_chats.add(chat_id)
+                            print(f">>> Received message from {chat_id}: {text}")
+                            
+                            welcome_text = (
+                                "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
+                                "✅ წარმატებით დაგიმახსოვრე!\n"
+                                "ბოტი ფონურ რეჟიმში აკვირდება ბაზრებს და გამოგიგზავნის კოეფიციენტების ვარდნის სიგნალებს."
+                            )
+                            send_telegram_message(chat_id, welcome_text)
+        except Exception as e:
+            print(f"!!! Poller error: {e}")
+            time.sleep(5)
 
 # Background automatic signal scanner & pusher
 def auto_signal_scanner():
@@ -62,19 +90,15 @@ def auto_signal_scanner():
                 "🚀 მონაცემი წამოღებულია ცოცხალი ბაზრიდან!"
             )
             for chat_id in list(subscribed_chats):
-                try:
-                    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                    requests.post(url, json={"chat_id": chat_id, "text": auto_text})
-                except Exception as e:
-                    print(f"Error sending auto signal: {e}")
+                send_telegram_message(chat_id, auto_text)
 
 if __name__ == "__main__":
-    # ავტომატურად ვურერთებთ ვებჰუქს ცალკე თრედიდან
-    threading.Thread(target=set_webhook_url, daemon=True).start()
+    # Start HTTP server for Render port binding
+    threading.Thread(target=run_http_server, daemon=True).start()
     
-    # ფონური სკანერის გაშვება
+    # Start background signal scanner
     threading.Thread(target=auto_signal_scanner, daemon=True).start()
     
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+    # Start direct Telegram poller
+    telegram_poller()
     
