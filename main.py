@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 # Storage for users who started the bot (to send automatic signals)
 subscribed_chats = set()
 
-# Bot Token integrated directly
-BOT_TOKEN = "8814326130:AAH4etd9DQYrpWUMaTMZ2wBRNK8-tRuFeY"
+# Fresh Bot Token integrated directly
+BOT_TOKEN = "8934076928:AAejdrV1HvQv6tmhlL_LXUIQQkYbfGck7uw"
 
 # Dummy HTTP Server to satisfy Render Web Service port binding requirement
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -173,7 +173,7 @@ def main():
         logger.error("TELEGRAM_BOT_TOKEN is missing or not set!")
         return
 
-    # Force delete any stuck webhooks so polling can work properly
+    # Force delete any webhooks so polling can work cleanly
     try:
         requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true")
         logger.info("Webhook successfully cleared.")
