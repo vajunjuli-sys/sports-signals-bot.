@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import threading
 import requests
@@ -22,18 +23,27 @@ def run_http_server():
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     server.serve_forever()
 
-# Direct Telegram Updates Poller with detailed logs
 def telegram_poller():
-    print("=== TELEGRAM POLLER INITIALIZING ===")
+    print("=== BOT STARTING UP ===", flush=True)
+    
+    # 1. Check if token is valid via getMe
+    try:
+        me_url = f"https://api.telegram.org/bot{BOT_TOKEN}/getMe"
+        me_res = requests.get(me_url, timeout=10)
+        print("getMe response:", me_res.text, flush=True)
+    except Exception as e:
+        print(f"Error calling getMe: {e}", flush=True)
+
+    # 2. Delete existing webhooks
     try:
         del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
         res = requests.get(del_url, timeout=10)
-        print("Webhook clear response:", res.text)
+        print("Webhook clear response:", res.text, flush=True)
     except Exception as e:
-        print(f"Error clearing webhook: {e}")
+        print(f"Error clearing webhook: {e}", flush=True)
 
     offset = 0
-    print("Direct Telegram poller started successfully, waiting for messages...")
+    print("Entering polling loop, waiting for messages...", flush=True)
     
     while True:
         try:
@@ -41,8 +51,7 @@ def telegram_poller():
             response = requests.get(url, timeout=35)
             data = response.json()
             
-            # ლოგებში გამოჩნდება რას აბრუნებს ტელეგრამი
-            print("API Response:", data)
+            print("API Response data:", data, flush=True)
             
             if data.get("ok"):
                 for result in data.get("result", []):
@@ -53,7 +62,7 @@ def telegram_poller():
                         text = message.get("text", "")
                         
                         subscribed_chats.add(chat_id)
-                        print(f">>> Received message from {chat_id}: {text}")
+                        print(f">>> Received message from {chat_id}: {text}", flush=True)
                         
                         welcome_text = (
                             "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
@@ -62,9 +71,9 @@ def telegram_poller():
                         )
                         send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
                         send_res = requests.post(send_url, json={"chat_id": chat_id, "text": welcome_text})
-                        print(f"<<< Send message status: {send_res.status_code}, body: {send_res.text}")
+                        print(f"<<< Send message status: {send_res.status_code}, body: {send_res.text}", flush=True)
         except Exception as e:
-            print(f"!!! Poller error: {e}")
+            print(f"!!! Poller error: {e}", flush=True)
             time.sleep(5)
 
 if __name__ == "__main__":
