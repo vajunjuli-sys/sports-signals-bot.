@@ -6,7 +6,6 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BOT_TOKEN = "8934076928:AAF1Nkpu65Q9MN5SXH9WtRRQnBU2QEgF9Y0"
-RENDER_URL = "https://sports-signals-bot.onrender.com"
 
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -18,63 +17,63 @@ def send_message(chat_id, text):
     except Exception as e:
         print(f"Send error: {e}")
 
-# ავტომატურად აყენებს ვებჰუქს გაშვებისას
-def auto_set_webhook():
-    time.sleep(3)
-    wh_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={RENDER_URL}"
+# 1. ფონური პოლერი (Telegram Polling) - მუშაობს გამავალი მოთხოვნებით, ვებჰუქების გარეშე
+def start_telegram_poller():
+    time.sleep(5)
+    # ვასუფთავებთ ნებისმიერ ძველ ვებჰუქს, რომ getUpdates-მა თავისუფლად იმუშაოს
     try:
-        with urllib.request.urlopen(wh_url, timeout=10) as resp:
-            print("Webhook auto-registered:", resp.read().decode())
-    except Exception as e:
-        print(f"Webhook registration error: {e}")
+        del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
+        urllib.request.urlopen(del_url, timeout=10)
+        print("Webhook cleared successfully.")
+    except Exception:
+        pass
 
-class WebhookHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        # UptimeRobot-ის პინგებისთვის
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Sports Signals Bot is active!")
-
-    def do_POST(self):
-        # ტელეგრამიდან შემომავალი შეტყობინებების დამუშავება
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length)
-        
+    offset = 0
+    print("Background polling started...")
+    while True:
         try:
-            data = json.loads(post_data.decode('utf-8'))
-            if "message" in data:
-                message = data["message"]
-                chat_id = message["chat"]["id"]
-                text = message.get("text", "")
-                
-                print(f"Received message: {text} from {chat_id}")
-                
-                if text.startswith("/start"):
-                    reply_text = (
-                        "🤖 სპორტული სიგნალების ბოტი\n\n"
-                        "✅ კავშირი წარმატებით დამყარდა!\n"
-                        "ბოტი მზად არის დააკვირდეს ბაზრებს და გამოგიგზავნოს სიგნალები."
-                    )
-                    send_message(chat_id, reply_text)
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=25"
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=30) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if data.get("ok"):
+                    for result in data.get("result", []):
+                        offset = result["update_id"] + 1
+                        message = result.get("message")
+                        if message and "chat" in message:
+                            chat_id = message["chat"]["id"]
+                            text = message.get("text", "")
+                            print(f"Received message: {text} from {chat_id}")
+                            
+                            if text.startswith("/start"):
+                                reply_text = (
+                                    "🤖 სპორტული სიგნალების ბოტი\n\n"
+                                    "✅ კავშირი წარმატებით დამყარდა!\n"
+                                    "ბოტი მზად არის დააკვირდეს ბაზრებს და გამოგიგზავნოს სიგნალები."
+                                )
+                                send_message(chat_id, reply_text)
         except Exception as e:
-            print(f"Error processing update: {e}")
+            print(f"Polling error: {e}")
+            time.sleep(3)
 
+# 2. HTTP სერვერი Render-ისა და UptimeRobot-ისთვის (ინარჩუნებს სერვერს გაღვიძებულს)
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"OK")
-
+        self.wfile.write(b"Bot server is active!")
     def log_message(self, format, *args):
         pass
 
-def run():
+def run_web_server():
     port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), WebhookHandler)
-    print(f"Server running on port {port}...")
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    print(f"Web server running on port {port}...")
     server.serve_forever()
 
 if __name__ == "__main__":
-    # ფონურ რეჟიმში ავტომატურად ვარეგისტრირებთ ვებჰუქს
-    threading.Thread(target=auto_set_webhook, daemon=True).start()
-    # ვუშვებთ მთავარ სერვერს
-    run()
+    # ფონურ თრედში ვუშვებთ ტელეგრამის პოლერს
+    threading.Thread(target=start_telegram_poller, daemon=True).start()
+    # მთავარ თრედში ვუშვებთ ვებ სერვერს პორტის დასაჭერად
+    run_web_server()
     
