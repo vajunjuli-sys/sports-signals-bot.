@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 # Storage for users who started the bot (to send automatic signals)
 subscribed_chats = set()
 
-# 👉 აქ ჩასვი შენი ახალი, ნამდვილი ტოკენი BotFather-დან:
-BOT_TOKEN = "შენი_ახალი_ტოკენი_აქ"
+# 👉 აქ ჩასვი შენი ნამდვილი ტოკენი BotFather-იდან:
+BOT_TOKEN = "შენი_ნამდვილი_ტოკენი_აქ"
 
 # Dummy HTTP Server to satisfy Render Web Service port binding requirement
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -37,11 +37,11 @@ def auto_signal_scanner():
         
         if subscribed_chats:
             auto_text = (
-                "🚨 **ავტომატური სიგნალი! აღმოჩენილია ახალი ვარდნა:**\n\n"
-                "⚾ **ბოსტონი - ნიუ იორკი (MLB)**\n"
+                "🚨 ავტომატური სიგნალი! აღმოჩენილია ახალი ვარდნა:\n\n"
+                "⚾ ბოსტონი - ნიუ იორკი (MLB)\n"
                 "📉 ბაზარი: ინინგების ჰანდიკაპი (-2.5)\n"
                 "🏢 ბუკმეკერი: 1xBet\n"
-                "🔢 კოეფიციენტი: ~~15.50~~ ➡️ **4.20** (-73%)\n"
+                "🔢 კოეფიციენტი: 15.50 ➡️ 4.20 (-73%)\n"
                 "🕒 დრო: ახლახანს\n"
                 "🚀 რეკორდული ვარდნა ფიქსირდება!"
             )
@@ -104,14 +104,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     subscribed_chats.add(chat_id)
 
     welcome_text = (
-        "🤖 **OddsPortal-ის ანალოგიური სპორტული სიგნალების ბოტი**\n\n"
-        "✅ **ავტომატური რეჟიმი ჩართულია!** ბოტი ფონურ რეჟიმში სკანირებს ბაზრებს და თავად გამოგიგზავნის ვარდნებს.\n\n"
+        "🤖 OddsPortal-ის ანალოგიური სპორტული სიგნალების ბოტი\n\n"
+        "✅ ავტომატური რეჟიმი ჩართულია! ბოტი ფონურ რეჟიმში სკანირებს ბაზრებს და თავად გამოგიგზავნის ვარდნებს.\n\n"
         "აირჩიე კატეგორია ქვემოთ მოცემული ღილაკებიდან:"
     )
     if update.message:
-        await update.message.reply_text(welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+        await update.message.reply_text(welcome_text, reply_markup=get_main_keyboard())
     elif update.callback_query:
-        await update.callback_query.message.edit_text(welcome_text, parse_mode="Markdown", reply_markup=get_main_keyboard())
+        await update.callback_query.message.edit_text(welcome_text, reply_markup=get_main_keyboard())
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -122,13 +122,75 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "refresh_status":
         await query.message.edit_text(
-            "🟢 **სისტემა მუშაობს ავტომატურ რეჟიმში!**\n\n"
+            "🟢 სისტემა მუშაობს ავტომატურ რეჟიმში!\n\n"
             "• სკანირებული სპორტები: 13 სახეობა\n"
             "• ფილტრი: 35% - 70%+ კვეთის ვარდნები\n"
             "• სტატუსი: ავტომატური შეტყობინებები აქტიურია",
-            parse_mode="Markdown",
             reply_markup=get_main_keyboard()
         )
     elif data == "filter_70":
-        text = "🔥 **70%+ და მეტი კლების სიგნალები:**\n\n
+        text = "🔥 70%+ და მეტი კლების სიგნალები:\n\n"
+        for s in active_signals:
+            text += (
+                f"{s['sport']} | {s['league']}\n"
+                f"⚔️ {s['match']}\n"
+                f"📊 ბაზარი: {s['market']}\n"
+                f"🏢 ბუკმეკერი: {s['bookmaker']}\n"
+                f"📉 კოეფიციენტი: {s['old_odds']:.2f} ➡️ {s['new_odds']:.2f} ({s['drop']}%)\n"
+                f"🕒 დრო: {s['time']}\n"
+                f"🏷️ სტატუსი: {s['status']}\n\n"
+                "-----------------------------------\n"
+            )
+        await query.message.edit_text(text, reply_markup=get_main_keyboard())
+
+    elif data.startswith("sport_"):
+        sport_key = data.split("_")[1]
+        sport_name = SPORTS_CATEGORIES.get(sport_key, "სპორტი")
         
+        text = (
+            f"📊 {sport_name} — მიმდინარე მსხვილი ვარდნები:\n\n"
+            "⚽ პორტუგალია - ვენესუელა (ფუტვე)\n"
+            "📉 ბაზარი: EX-2 | ვარდნა: -38%\n"
+            "🏢 ბუკმეკერი: 888sport\n"
+            "🔢 კუშები: 24.00 ➡️ 15.00\n\n"
+            "🔍 ავტომატური სკანირება აქტიურია..."
+        )
+        await query.message.edit_text(text, reply_markup=get_main_keyboard())
+
+    elif data == "daily_express":
+        text = (
+            "🎫 დღის რეკომენდებული ექსპრესი:\n\n"
+            "1️⃣ ბეისბოლი / MLB: ჰანდიკაპი (-2.5) — კოეფიციენტი: 4.20 (ვარდნა -73%)\n"
+            "2️⃣ ფეხბურთი / 1-ლი ტაიმი: ტოტალი მეტად — კოეფიციენტი: 3.10 (ვარდნა -45%)\n\n"
+            "📈 საერთო სავარაუდო კოეფიციენტი: ~13.02"
+        )
+        await query.message.edit_text(text, reply_markup=get_main_keyboard())
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🟢 ავტომატური სკანერი მუშაობს. ახალი ვარდნები თავისით გამოიგზავნება.")
+
+def main():
+    if not BOT_TOKEN or BOT_TOKEN == "შენი_ნამდვილი_ტოკენი_აქ":
+        logger.error("TELEGRAM_BOT_TOKEN is missing or not set!")
+        return
+
+    # Start background HTTP server for Render
+    server_thread = threading.Thread(target=run_http_server, daemon=True)
+    server_thread.start()
+
+    # Start background automated scanner thread
+    scanner_thread = threading.Thread(target=auto_signal_scanner, daemon=True)
+    scanner_thread.start()
+
+    app = Application.builder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("status", status_command))
+    app.add_handler(CallbackQueryHandler(button_handler))
+
+    logger.info("Sports Signals Bot with Auto-Scanner is starting...")
+    app.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
+    
