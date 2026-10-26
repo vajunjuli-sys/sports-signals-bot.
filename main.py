@@ -1,23 +1,26 @@
 import os
 import json
 import urllib.request
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
 import time
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 BOT_TOKEN = "8934076928:AAF1Nkpu65Q9MN5SXH9WtRRQnBU2QEgF9Y0"
-RENDER_URL = "https://sports-signals-bot.onrender.com"
+subscribed_chats = set()
 
-# ავტომატურად აყენებს ვებჰუქს სერვერის გაშვებისთანავე
-def auto_set_webhook():
-    time.sleep(4)
-    wh_url = f"https://api.telegram.org/bot{BOT_TOKEN}/setWebhook?url={RENDER_URL}"
-    try:
-        req = urllib.request.Request(wh_url)
-        with urllib.request.urlopen(req, timeout=10) as response:
-            print("Auto-set webhook response:", response.read().decode())
-    except Exception as e:
-        print(f"Error auto-setting webhook: {e}")
+# Render-ის პორტის შესანარჩუნებელი სერვერი
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is active!")
+    def log_message(self, format, *args):
+        pass
+
+def run_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), HealthHandler)
+    server.serve_forever()
 
 def send_message(chat_id, text):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -27,49 +30,47 @@ def send_message(chat_id, text):
         with urllib.request.urlopen(req, timeout=10) as response:
             return response.read()
     except Exception as e:
-        print(f"Error sending message: {e}")
+        print(f"Send error: {e}")
 
-class WebhookHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Sports Signals Bot is active!")
+# Telegram Poller - მუშაობს ყოველგვარი ვებჰუქის გარეშე
+def start_poller():
+    time.sleep(3)
+    # სრულად ვასუფთავებთ ნებისმიერ ძველ ვებჰუქს
+    try:
+        del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
+        urllib.request.urlopen(del_url, timeout=10)
+    except Exception:
+        pass
 
-    def do_POST(self):
-        content_length = int(self.headers.get('Content-Length', 0))
-        post_data = self.rfile.read(content_length)
-        
+    offset = 0
+    print("Polling started successfully...")
+    while True:
         try:
-            data = json.loads(post_data.decode('utf-8'))
-            if "message" in data:
-                message = data["message"]
-                chat_id = message["chat"]["id"]
-                text = message.get("text", "")
-                
-                print(f"Received message: {text} from {chat_id}")
-                
-                reply_text = (
-                    "🤖 სპორტული სიგნალების ბოტი\n\n"
-                    "✅ კავშირი წარმატებით დამყარდა!\n"
-                    "ბოტი მზად არის დააკვირდეს ბაზრებს და გამოგიგზავნოს სიგნალები."
-                )
-                send_message(chat_id, reply_text)
+            url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=25"
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=30) as response:
+                data = json.loads(response.read().decode('utf-8'))
+                if data.get("ok"):
+                    for result in data.get("result", []):
+                        offset = result["update_id"] + 1
+                        message = result.get("message")
+                        if message and "chat" in message:
+                            chat_id = message["chat"]["id"]
+                            subscribed_chats.add(chat_id)
+                            
+                            reply_text = (
+                                "🤖 სპორტული სიგნალების ბოტი\n\n"
+                                "✅ წარმატებით დაუკავშირდი ბოტს!\n"
+                                "მონიტორინგი აქტიურია."
+                            )
+                            send_message(chat_id, reply_text)
         except Exception as e:
-            print(f"Error processing update: {e}")
-
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-def run():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), WebhookHandler)
-    print(f"Webhook server running on port {port}...")
-    server.serve_forever()
+            print(f"Poller error: {e}")
+            time.sleep(3)
 
 if __name__ == "__main__":
-    # ფონურ თრედში ავტომატურად ვარეგისტრირებთ ვებჰუქს
-    threading.Thread(target=auto_set_webhook, daemon=True).start()
-    # ვუშვებთ მთავარ ვებ სერვერს
-    run()
+    # ვუშვებთ პოლერს ფონურ თრედში
+    threading.Thread(target=start_poller, daemon=True).start()
+    # მთავარ თრედში ვუშვებთ პორტის დამჭერ სერვერს
+    run_server()
     
