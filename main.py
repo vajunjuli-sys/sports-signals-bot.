@@ -22,9 +22,9 @@ def run_http_server():
     server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
     server.serve_forever()
 
-# Direct Telegram Updates Poller using direct HTTP requests
+# Direct Telegram Updates Poller with detailed logs
 def telegram_poller():
-    # Force delete any existing webhooks so getUpdates can work properly
+    print("=== TELEGRAM POLLER INITIALIZING ===")
     try:
         del_url = f"https://api.telegram.org/bot{BOT_TOKEN}/deleteWebhook?drop_pending_updates=true"
         res = requests.get(del_url, timeout=10)
@@ -33,13 +33,16 @@ def telegram_poller():
         print(f"Error clearing webhook: {e}")
 
     offset = 0
-    print("Direct Telegram poller started successfully...")
+    print("Direct Telegram poller started successfully, waiting for messages...")
     
     while True:
         try:
             url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates?offset={offset}&timeout=30"
             response = requests.get(url, timeout=35)
             data = response.json()
+            
+            # ლოგებში გამოჩნდება რას აბრუნებს ტელეგრამი
+            print("API Response:", data)
             
             if data.get("ok"):
                 for result in data.get("result", []):
@@ -50,9 +53,8 @@ def telegram_poller():
                         text = message.get("text", "")
                         
                         subscribed_chats.add(chat_id)
-                        print(f"Received message from chat_id {chat_id}: {text}")
+                        print(f">>> Received message from {chat_id}: {text}")
                         
-                        # Send response back to user immediately on any message or /start
                         welcome_text = (
                             "🤖 სპორტული სიგნალების ავტომატური ბოტი\n\n"
                             "✅ წარმატებით დაგიმახსოვრე!\n"
@@ -60,9 +62,9 @@ def telegram_poller():
                         )
                         send_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
                         send_res = requests.post(send_url, json={"chat_id": chat_id, "text": welcome_text})
-                        print(f"Send message status: {send_res.status_code}")
+                        print(f"<<< Send message status: {send_res.status_code}, body: {send_res.text}")
         except Exception as e:
-            print(f"Poller error: {e}")
+            print(f"!!! Poller error: {e}")
             time.sleep(5)
 
 if __name__ == "__main__":
