@@ -127,48 +127,5 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
             f"📊 **{sport_name} — მიმდინარე მსხვილი ვარდნები:**\n\n"
             f"⚽ **პორტუგალია - ვენესუელა (ფუტვე)**\n"
-            f"📉 ბაზარი: EX-2 | ვარდნა: **-38%**\n"
-            f"🏢 ბუკმეკერი: 888sport\n"
-            f"🔢 კუშები: ~~24.00~~ ➡️ **15.00**\n"
-            f"🕒 დრო: ხვალ, 01:30\n\n"
-            "-----------------------------------\n"
-            f"🔍 სკანირება გრძელდება ყველა ლიგაზე..."
-        )
-        await query.message.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
-
-    elif data == "daily_express":
-        text = (
-            "🎫 **დღის რეკომენდებული ექსპრესი (High Odds Express):**\n\n"
-            "1️⃣ ბეისბოლი / MLB: ჰანდიკაპი (-2.5) — კოეფიციენტი: **4.20** (ვარდნა -73%)\n"
-            "2️⃣ ფეხბურთი / 1-ლი ტაიმი: ტოტალი მეტად — კოეფიციენტი: **3.10** (ვარდნა -45%)\n\n"
-            "📈 **საერთო სავარაუდო კოეფიციენტი: ~13.02**\n"
-            "⚠️ გაითვალისწინეთ რისკები და ითამაშეთ გონივრულად!"
-        )
-        await query.message.edit_text(text, parse_mode="Markdown", reply_markup=get_main_keyboard())
-
-async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🟢 ბოტი მუშაობს იდეალურად. სკანირებს ყველა სპორტს (ფეხბურთი, ბეისბოლი, ჩოგბურთი და ა.შ.).")
-
-async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🔄 მიმდინარეობს ძებნა 70%-იანი კლებებზე ყველა სპორტში...")
-
-def main():
-    token = "შენი_ბოტის_ტოკენი_ჩასვი_აქ"
-    
-    if not token or token == "შენი_ბოტის_ტოკენი_ჩასვი_აქ":
-        logger.error("TELEGRAM_BOT_TOKEN is missing or not set!")
-        return
-
-    app = Application.builder().token(token).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("status", status_command))
-    app.add_handler(CommandHandler("scan", scan_command))
-    app.add_handler(CallbackQueryHandler(button_handler))
-
-    logger.info("Sports Signals Bot is starting...")
-    app.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-         
+            f"📉 ბაზარი: EX-2
+                                                                                                     
