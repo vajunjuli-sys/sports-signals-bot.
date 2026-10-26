@@ -172,10 +172,10 @@ def main():
     server_thread = threading.Thread(target=run_http_server, daemon=True)
     server_thread.start()
 
-    # 👉 აქ ჩასვი შენი ნამდვილი ტოკენი ბრჭყალებში:
-    token = "შენი_ბოტის_ტოკენი_ჩასვი_აქ"
+    # Bot Token integrated directly
+    token = "7949390230:AAGYqE2O-B_34xK4C8Z1s42M6W1g7h7p2J0"
     
-    if not token or token == "შენი_ბოტის_ტოკენი_ჩასვი_აქ":
+    if not token:
         logger.error("TELEGRAM_BOT_TOKEN is missing or not set!")
         return
 
