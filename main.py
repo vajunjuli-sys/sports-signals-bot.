@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 # Storage for users who started the bot (to send automatic signals)
 subscribed_chats = set()
 
-# 👉 აქ ჩასვი შენი ნამდვილი ტოკენი BotFather-იდან:
-BOT_TOKEN = "შენი_ნამდვილი_ტოკენი_აქ"
+# Bot Token integrated directly
+BOT_TOKEN = "7949390230:AAGYqE2O-B_34xK4C8Z1s42M6W1g7h7p2J0"
 
 # Dummy HTTP Server to satisfy Render Web Service port binding requirement
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -32,9 +32,7 @@ def run_http_server():
 
 # Background thread that automatically scans and pushes signals to users
 def auto_signal_scanner():
-    while True:
-        time.sleep(60)  # ყოველ 60 წამში ერთხელ შემოწმება
-        
+    while Time.sleep(60):  # ყოველ 60 წამში ერთხელ შემოწმება
         if subscribed_chats:
             auto_text = (
                 "🚨 ავტომატური სიგნალი! აღმოჩენილია ახალი ვარდნა:\n\n"
@@ -170,7 +168,7 @@ async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🟢 ავტომატური სკანერი მუშაობს. ახალი ვარდნები თავისით გამოიგზავნება.")
 
 def main():
-    if not BOT_TOKEN or BOT_TOKEN == "შენი_ნამდვილი_ტოკენი_აქ":
+    if not BOT_TOKEN:
         logger.error("TELEGRAM_BOT_TOKEN is missing or not set!")
         return
 
